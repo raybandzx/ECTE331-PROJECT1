@@ -1,0 +1,182 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+/**
+ * Entry point for the fault-tolerant autonomous drone navigation
+ * simulation. Three redundant sensors (A, B, C) are polled each
+ * iteration. Their readings are combined using Triple Modular
+ * Redundancy (TMR) majority voting to decide the drone's altitude.
+ * <p>
+ * Reliability is monitored across iterations: if two consecutive
+ * iterations fail to produce a trustworthy majority decision (either
+ * because fewer than two sensors returned valid readings, or because
+ * all valid readings disagreed), the system throws a
+ * {@link SystemReliabilityException}, logs SAFE MODE activation, and
+ * halts execution.
+ *
+ * @author ECTE331 Student
+ */
+public class DroneNavigationSystem {
+
+    /** Safety cap on iterations so the demo simulation terminates on its own. */
+    private static final int MAX_ITERATIONS = 50;
+
+    /** Initial "last known good" altitude used before any decision is made. */
+    private static final int INITIAL_ALTITUDE = 100;
+
+    /**
+     * Program entry point. Runs the sensor-polling / majority-voting loop
+     * until either {@link #MAX_ITERATIONS} is reached or the system enters
+     * SAFE MODE due to two consecutive reliability failures.
+     *
+     * @param args not used
+     */
+    public static void main(String[] args) {
+        String logFileName = "log_" + (1000 + new Random().nextInt(9000)) + ".txt";
+        EventLogger logger = new EventLogger(logFileName);
+
+        Sensor sensorA = new Sensor("A");
+        Sensor sensorB = new Sensor("B");
+        Sensor sensorC = new Sensor("C");
+
+        int previousAltitude = INITIAL_ALTITUDE;
+        int consecutiveReliabilityFailures = 0;
+        int iteration = 0;
+
+        logger.log("=== Drone Navigation System started. Log file: " + logFileName + " ===");
+
+        try {
+            while (iteration < MAX_ITERATIONS) {
+                iteration++;
+                System.out.println("\n--- Iteration " + iteration + " ---");
+
+                List<SensorReading> validReadings = new ArrayList<>();
+                List<String> failedSensors = new ArrayList<>();
+                List<String> corruptedSensors = new ArrayList<>();
+
+                readOneSensor(sensorA, validReadings, failedSensors, corruptedSensors, logger);
+                readOneSensor(sensorB, validReadings, failedSensors, corruptedSensors, logger);
+                readOneSensor(sensorC, validReadings, failedSensors, corruptedSensors, logger);
+
+                boolean reliabilityFailureThisRound = false;
+                Integer decidedAltitude = null;
+
+                if (validReadings.size() < 2) {
+                    reliabilityFailureThisRound = true;
+                    logger.log("RELIABILITY WARNING: fewer than 2 valid readings ("
+                            + validReadings.size() + " valid). Failed sensors: " + failedSensors
+                            + ", Corrupted sensors: " + corruptedSensors);
+                } else {
+                    decidedAltitude = findMajority(validReadings, logger);
+                    if (decidedAltitude == null) {
+                        reliabilityFailureThisRound = true;
+                        logger.log("RELIABILITY WARNING: no majority found among valid sensor readings.");
+                    }
+                }
+
+                if (decidedAltitude != null) {
+                    logger.log("MAJORITY DECISION accepted: final altitude = " + decidedAltitude + " m");
+                    System.out.println("Decided altitude: " + decidedAltitude + " m");
+                    previousAltitude = decidedAltitude;
+                } else {
+                    logger.log("FALLBACK DECISION: using previous valid altitude = " + previousAltitude + " m");
+                    System.out.println("Fallback altitude: " + previousAltitude + " m");
+                }
+
+                if (reliabilityFailureThisRound) {
+                    consecutiveReliabilityFailures++;
+                    System.out.println("Reliability status: WARNING (" + consecutiveReliabilityFailures
+                            + " consecutive failure(s))");
+                    if (consecutiveReliabilityFailures >= 2) {
+                        throw new SystemReliabilityException(
+                                "Two consecutive reliability failures detected at iteration " + iteration);
+                    }
+                } else {
+                    System.out.println("Reliability status: OK");
+                    consecutiveReliabilityFailures = 0;
+                }
+            }
+
+            logger.log("Simulation completed after " + iteration + " iterations without entering SAFE MODE.");
+            System.out.println("\nSimulation finished normally after " + iteration + " iterations.");
+
+        } catch (SystemReliabilityException e) {
+            logger.log("SAFE MODE ACTIVATED: " + e.getMessage());
+            System.out.println("\n*** SAFE MODE ACTIVATED - execution halted. ***");
+            System.out.println("Reason: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Attempts to read a single sensor, sorting the outcome into the
+     * appropriate bucket (valid / corrupted / failed) and logging
+     * failure or corruption events as they occur.
+     *
+     * @param sensor           the sensor to read
+     * @param validReadings    list to append to if the reading is valid
+     * @param failedSensors    list to append the sensor ID to if it failed
+     * @param corruptedSensors list to append the sensor ID to if the reading was corrupted
+     * @param logger           logger used to record failure/corruption events
+     */
+    private static void readOneSensor(Sensor sensor, List<SensorReading> validReadings,
+            List<String> failedSensors, List<String> corruptedSensors, EventLogger logger) {
+        try {
+            int value = sensor.readSensor();
+            if (value < 0 || value > 200) {
+                corruptedSensors.add(sensor.getId());
+                logger.log("CORRUPTED READING: Sensor " + sensor.getId() + " produced out-of-range value " + value);
+                System.out.println("Sensor " + sensor.getId() + ": " + value + "  [CORRUPTED]");
+            } else {
+                validReadings.add(new SensorReading(sensor.getId(), value));
+                System.out.println("Sensor " + sensor.getId() + ": " + value);
+            }
+        } catch (SensorReadException e) {
+            failedSensors.add(sensor.getId());
+            logger.log("SENSOR FAILURE: " + e.getMessage());
+            System.out.println("Sensor " + sensor.getId() + ": FAILED  [" + e.getMessage() + "]");
+        }
+    }
+
+    /**
+     * Applies the majority-voting rule to the set of valid sensor readings.
+     * If any two valid readings are equal, that shared value is the
+     * decision and the odd-one-out (if any) is logged as an outlier. If
+     * all valid readings differ, no majority exists.
+     *
+     * @param validReadings the valid (in-range) sensor readings for this iteration
+     * @param logger        logger used to record outlier detection and majority decisions
+     * @return the agreed altitude value, or {@code null} if no majority was found
+     */
+    private static Integer findMajority(List<SensorReading> validReadings, EventLogger logger) {
+        for (int i = 0; i < validReadings.size(); i++) {
+            for (int j = i + 1; j < validReadings.size(); j++) {
+                if (validReadings.get(i).value == validReadings.get(j).value) {
+                    int agreedValue = validReadings.get(i).value;
+
+                    List<String> outliers = new ArrayList<>();
+                    for (SensorReading r : validReadings) {
+                        if (r.value != agreedValue) {
+                            outliers.add(r.sensorId);
+                        }
+                    }
+                    if (!outliers.isEmpty()) {
+                        logger.log("OUTLIER DETECTION: Sensor(s) " + outliers
+                                + " disagree with majority value " + agreedValue);
+                    }
+                    logger.log("MAJORITY DECISION: Sensors " + validReadings.get(i).sensorId
+                            + " and " + validReadings.get(j).sensorId + " agree on value " + agreedValue);
+                    return agreedValue;
+                }
+            }
+        }
+
+        // No two valid readings matched - all differ, no majority.
+        List<String> allIds = new ArrayList<>();
+        for (SensorReading r : validReadings) {
+            allIds.add(r.sensorId);
+        }
+        logger.log("OUTLIER DETECTION: all valid sensor readings disagree: " + allIds);
+        return null;
+    }
+}
