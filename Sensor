@@ -1,0 +1,80 @@
+import java.util.Random;
+
+/**
+ * Represents a single redundant altitude sensor (A, B, or C) on board the
+ * drone. Each call to {@link #readSensor()} simulates one of three
+ * possible outcomes based on a randomly generated "chance" value in
+ * [0, 99]:
+ * <ul>
+ *   <li>0-14  -&gt; sensor failure ({@link SensorReadException} thrown)</li>
+ *   <li>15-29 -&gt; corrupted reading (value generated outside [0, 200])</li>
+ *   <li>30-99 -&gt; valid reading (value generated inside [0, 200])</li>
+ * </ul>
+ *
+ * @author ECTE331 Student
+ */
+public class Sensor {
+
+    /** Unique identifier for this sensor, e.g. "A", "B", or "C". */
+    private final String id;
+
+    /** Shared random generator used to simulate readings and fault behaviour. */
+    private final Random random = new Random();
+
+    /** Baseline altitude (metres) used when generating a valid reading. */
+    private static final int BASELINE_ALTITUDE = 100;
+
+    /** Spread (metres) around the baseline used when generating a valid reading. */
+    private static final int VALID_SPREAD = 60;
+
+    /**
+     * Creates a new Sensor with the given identifier.
+     *
+     * @param id the sensor identifier (e.g. "A", "B", "C")
+     */
+    public Sensor(String id) {
+        this.id = id;
+    }
+
+    /**
+     * Returns this sensor's identifier.
+     *
+     * @return the sensor ID
+     */
+    public String getId() {
+        return id;
+    }
+
+    /**
+     * Simulates a single altitude reading from this sensor.
+     * <p>
+     * A random "chance" value in [0, 99] decides the outcome:
+     * failure, corrupted reading, or valid reading, per the assignment
+     * specification.
+     *
+     * @return the simulated altitude reading. This may be a valid value
+     *         in [0, 200] or a corrupted value outside that range.
+     * @throws SensorReadException if the simulated outcome is a sensor failure
+     */
+    public int readSensor() throws SensorReadException {
+        int chance = random.nextInt(100); // 0-99 inclusive
+
+        if (chance < 15) {
+            // Sensor failure
+            throw new SensorReadException("Sensor " + id + " failed to read (chance=" + chance + ")");
+        } else if (chance < 30) {
+            // Corrupted reading: force a value outside [0, 200]
+            if (random.nextBoolean()) {
+                return -1 - random.nextInt(50);   // negative: -1 .. -50
+            } else {
+                return 201 + random.nextInt(50);  // above range: 201 .. 250
+            }
+        } else {
+            // Valid reading within [0, 200]
+            int value = BASELINE_ALTITUDE - (VALID_SPREAD / 2) + random.nextInt(VALID_SPREAD);
+            if (value < 0) value = 0;
+            if (value > 200) value = 200;
+            return value;
+        }
+    }
+}
