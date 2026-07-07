@@ -1,0 +1,53 @@
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * Utility class responsible for writing timestamped event log entries to
+ * both the console and a log file (e.g. "log_12345.txt"). Every important
+ * system event (sensor failure, corrupted reading, outlier detection,
+ * majority decision, fallback decision, SAFE MODE activation) is recorded
+ * through this class.
+ *
+ * @author ECTE331 Student
+ */
+public class EventLogger {
+
+    /** Name/path of the file this logger writes to. */
+    private final String filename;
+
+    /** Formatter used to prefix every log entry with date and time. */
+    private static final DateTimeFormatter FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * Creates a logger bound to the given file name. The file is created
+     * (or appended to) the first time {@link #log(String)} is called.
+     *
+     * @param filename the log file name, e.g. "log_4821.txt"
+     */
+    public EventLogger(String filename) {
+        this.filename = filename;
+    }
+
+    /**
+     * Writes a single timestamped entry to both the console and the log
+     * file.
+     *
+     * @param message the event description to log
+     */
+    public void log(String message) {
+        String timestamp = LocalDateTime.now().format(FORMATTER);
+        String entry = "[" + timestamp + "] " + message;
+
+        System.out.println(entry);
+
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filename, true))) {
+            writer.println(entry);
+        } catch (IOException e) {
+            System.err.println("ERROR: could not write to log file '" + filename + "': " + e.getMessage());
+        }
+    }
+}
