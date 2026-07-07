@@ -1,0 +1,17 @@
+/**
+ * Custom checked exception thrown when the drone navigation system
+ * suffers two consecutive reliability failures and must enter SAFE MODE.
+ *
+ * @author ECTE331 Student
+ */
+public class SystemReliabilityException extends Exception {
+
+    /**
+     * Constructs a new SystemReliabilityException with a descriptive message.
+     *
+     * @param message description of why SAFE MODE was triggered
+     */
+    public SystemReliabilityException(String message) {
+        super(message);
+    }
+}
