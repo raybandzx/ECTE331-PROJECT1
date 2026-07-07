@@ -1,0 +1,26 @@
+/**
+ * Simple immutable holder pairing a sensor's identifier with a valid
+ * altitude value it produced. Used only for valid (in-range) readings
+ * during majority voting.
+ *
+ * @author ECTE331 Student
+ */
+public class SensorReading {
+
+    /** The ID of the sensor that produced this reading. */
+    public final String sensorId;
+
+    /** The valid altitude value, in [0, 200]. */
+    public final int value;
+
+    /**
+     * Creates a new SensorReading.
+     *
+     * @param sensorId the sensor identifier
+     * @param value    the valid altitude value
+     */
+    public SensorReading(String sensorId, int value) {
+        this.sensorId = sensorId;
+        this.value = value;
+    }
+}
