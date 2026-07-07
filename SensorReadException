@@ -1,0 +1,20 @@
+import java.io.IOException;
+
+/**
+ * Custom checked exception representing a sensor failure event.
+ * Thrown by {@link Sensor#readSensor()} when the simulated random
+ * "chance" value falls into the failure range (0-14).
+ *
+ * @author ECTE331 Student
+ */
+public class SensorReadException extends IOException {
+
+    /**
+     * Constructs a new SensorReadException with a descriptive message.
+     *
+     * @param message description of the sensor failure, including the sensor ID
+     */
+    public SensorReadException(String message) {
+        super(message);
+    }
+}
